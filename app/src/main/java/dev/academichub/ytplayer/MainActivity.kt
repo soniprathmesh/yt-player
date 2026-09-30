@@ -11,7 +11,11 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Rational
+import android.widget.Toast
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -81,6 +85,22 @@ class MainActivity : AppCompatActivity() {
             @JavascriptInterface
             fun setActive(active: Boolean) {
                 videoActive = active
+                runOnUiThread { updatePipParams() }
+            }
+
+            @JavascriptInterface
+            fun setState(state: Int) {
+                Handler(Looper.getMainLooper()).post { KeepAliveService.instance?.update(state = state) }
+            }
+
+            @JavascriptInterface
+            fun setTitle(title: String) {
+                Handler(Looper.getMainLooper()).post { KeepAliveService.instance?.update(newTitle = title) }
+            }
+
+            @JavascriptInterface
+            fun setHasList(list: Boolean) {
+                Handler(Looper.getMainLooper()).post { KeepAliveService.instance?.update(list = list) }
             }
 
             @JavascriptInterface
@@ -88,6 +108,11 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread { this@MainActivity.enterPip() }
             }
         }, "AndroidBridge")
+
+        // Notification / lock-screen buttons -> YouTube player commands
+        PlayerBus.command = { cmd ->
+            runOnUiThread { web.evaluateJavascript("window.yt && yt('$cmd')", null) }
+        }
 
         handleIntent(intent)
 
@@ -115,22 +140,51 @@ class MainActivity : AppCompatActivity() {
         web.loadUrl(url)
     }
 
-    private fun enterPip() {
+    private fun pipParams(): PictureInPictureParams {
+        val b = PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9))
+        // Android 12+: enter PiP automatically on Home / swipe-up gesture
+        if (Build.VERSION.SDK_INT >= 31) b.setAutoEnterEnabled(videoActive)
+        return b.build()
+    }
+
+    private fun updatePipParams() {
+        try { setPictureInPictureParams(pipParams()) } catch (e: Exception) { }
+    }
+
+    private fun enterPip(showErrors: Boolean = true) {
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
+            if (showErrors) Toast.makeText(this, "This phone does not support Picture-in-Picture", Toast.LENGTH_LONG).show()
+            return
+        }
         try {
-            enterPictureInPictureMode(
-                PictureInPictureParams.Builder()
-                    .setAspectRatio(Rational(16, 9))
-                    .build()
+            val ok = enterPictureInPictureMode(pipParams())
+            if (!ok && showErrors) askPipPermission()
+        } catch (e: Exception) {
+            if (showErrors) {
+                Toast.makeText(this, "PiP failed: ${e.message}", Toast.LENGTH_LONG).show()
+                askPipPermission()
+            }
+        }
+    }
+
+    /** Opens the phone setting where PiP can be switched on for this app. */
+    private fun askPipPermission() {
+        Toast.makeText(this, "Turn ON Picture-in-Picture for YT Player", Toast.LENGTH_LONG).show()
+        try {
+            startActivity(
+                Intent("android.settings.PICTURE_IN_PICTURE_SETTINGS", Uri.parse("package:$packageName"))
             )
         } catch (e: Exception) {
-            // PiP not allowed on this device / disabled in settings
+            try {
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+            } catch (e2: Exception) { }
         }
     }
 
     /** Called when the user presses Home / swipes up. */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (videoActive && !isInPictureInPictureMode) enterPip()
+        if (videoActive && !isInPictureInPictureMode) enterPip(showErrors = false)
     }
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
@@ -141,6 +195,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        PlayerBus.command = null
         stopService(Intent(this, KeepAliveService::class.java))
         web.destroy()
         super.onDestroy()
