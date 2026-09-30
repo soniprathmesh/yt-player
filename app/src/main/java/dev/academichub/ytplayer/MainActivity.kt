@@ -94,6 +94,11 @@ class MainActivity : AppCompatActivity() {
             }
 
             @JavascriptInterface
+            fun setPosition(posMs: Int, durMs: Int) {
+                Handler(Looper.getMainLooper()).post { KeepAliveService.instance?.updatePosition(posMs.toLong(), durMs.toLong()) }
+            }
+
+            @JavascriptInterface
             fun setTitle(title: String) {
                 Handler(Looper.getMainLooper()).post { KeepAliveService.instance?.update(newTitle = title) }
             }
@@ -112,6 +117,11 @@ class MainActivity : AppCompatActivity() {
         // Notification / lock-screen buttons -> YouTube player commands
         PlayerBus.command = { cmd ->
             runOnUiThread { web.evaluateJavascript("window.yt && yt('$cmd')", null) }
+        }
+
+        // Seek bar in the notification -> player
+        PlayerBus.seek = { ms ->
+            runOnUiThread { web.evaluateJavascript("window.yt && yt('seekTo',[${ms / 1000.0}, true])", null) }
         }
 
         handleIntent(intent)
@@ -169,7 +179,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Opens the phone setting where PiP can be switched on for this app. */
     private fun askPipPermission() {
-        Toast.makeText(this, "Turn ON Picture-in-Picture for YT Player", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Turn ON Picture-in-Picture for Prathmesh YouTube", Toast.LENGTH_LONG).show()
         try {
             startActivity(
                 Intent("android.settings.PICTURE_IN_PICTURE_SETTINGS", Uri.parse("package:$packageName"))
@@ -196,6 +206,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         PlayerBus.command = null
+        PlayerBus.seek = null
         stopService(Intent(this, KeepAliveService::class.java))
         web.destroy()
         super.onDestroy()

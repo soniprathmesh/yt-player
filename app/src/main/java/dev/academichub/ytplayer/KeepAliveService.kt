@@ -15,12 +15,15 @@ import android.media.session.PlaybackState
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
 import androidx.core.app.ServiceCompat
 
 /** Lets MainActivity receive button presses from the notification / lock screen. */
 object PlayerBus {
     /** Called with a YouTube player command: playVideo, pauseVideo, nextVideo, previousVideo */
     @Volatile var command: ((String) -> Unit)? = null
+    /** Called with the new position in milliseconds when the user drags the notification seek bar */
+    @Volatile var seek: ((Long) -> Unit)? = null
 }
 
 /**
@@ -44,8 +47,11 @@ class KeepAliveService : Service() {
 
     // what the web page tells us
     private var ytState = -1        // -1 none, 0 ended, 1 playing, 2 paused, 3 buffering
-    private var title = "YT Player"
+    private var title = "Prathmesh YouTube"
     private var hasList = false
+    private var positionMs = -1L    // -1 = unknown
+    private var durationMs = 0L
+    private var positionStamp = 0L  // when positionMs was measured
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -65,6 +71,12 @@ class KeepAliveService : Service() {
                 override fun onPause() { PlayerBus.command?.invoke("pauseVideo") }
                 override fun onSkipToNext() { PlayerBus.command?.invoke("nextVideo") }
                 override fun onSkipToPrevious() { PlayerBus.command?.invoke("previousVideo") }
+                override fun onSeekTo(pos: Long) {
+                    PlayerBus.seek?.invoke(pos)
+                    positionMs = pos                       // move the bar immediately
+                    positionStamp = SystemClock.elapsedRealtime()
+                    refresh(first = false)
+                }
             })
             isActive = true
         }
@@ -94,6 +106,19 @@ class KeepAliveService : Service() {
         refresh(first = false)
     }
 
+    /** Position report from the web page. Only rebuilds the notification if the bar is off by >2 s. */
+    fun updatePosition(pos: Long, dur: Long) {
+        val playing = ytState == 1
+        val predicted = if (playing && positionMs >= 0)
+            positionMs + (SystemClock.elapsedRealtime() - positionStamp) else positionMs
+        val durChanged = dur != durationMs
+        val drift = Math.abs(pos - predicted)
+        positionMs = pos
+        positionStamp = SystemClock.elapsedRealtime()
+        durationMs = dur
+        if (durChanged || positionMs < 0 || predicted < 0 || drift > 2000) refresh(first = false)
+    }
+
     private fun actionIntent(action: String): PendingIntent =
         PendingIntent.getService(
             this, action.hashCode(),
@@ -108,7 +133,7 @@ class KeepAliveService : Service() {
         val playing = ytState == 1 || ytState == 3
 
         // ---- MediaSession state ----
-        var actions = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE
+        var actions = PlaybackState.ACTION_SEEK_TO or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE
         if (hasList) actions = actions or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS
         session.setPlaybackState(
             PlaybackState.Builder()
@@ -119,13 +144,16 @@ class KeepAliveService : Service() {
                         3 -> PlaybackState.STATE_BUFFERING
                         else -> PlaybackState.STATE_PAUSED
                     },
-                    PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f
+                    if (durationMs > 0 && positionMs >= 0) positionMs else PlaybackState.PLAYBACK_POSITION_UNKNOWN,
+                    if (ytState == 1) 1f else 0f,
+                    SystemClock.elapsedRealtime()
                 ).build()
         )
         session.setMetadata(
             MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_TITLE, title)
-                .putString(MediaMetadata.METADATA_KEY_ARTIST, "YT Player")
+                .putString(MediaMetadata.METADATA_KEY_ARTIST, "Prathmesh YouTube")
+                .putLong(MediaMetadata.METADATA_KEY_DURATION, if (durationMs > 0) durationMs else -1L)
                 .build()
         )
 
