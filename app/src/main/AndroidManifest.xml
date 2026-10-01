@@ -20,6 +20,7 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:supportsPictureInPicture="true"
+            android:windowSoftInputMode="adjustResize"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboardHidden|uiMode">
 
             <intent-filter>

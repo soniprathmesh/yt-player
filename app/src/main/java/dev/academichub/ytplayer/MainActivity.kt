@@ -22,6 +22,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 
 /**
@@ -124,7 +125,19 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread { web.evaluateJavascript("window.yt && yt('seekTo',[${ms / 1000.0}, true])", null) }
         }
 
-        handleIntent(intent)
+        // Back button: first let the page close its search panel; only then leave the app
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                web.evaluateJavascript("(window.onBackPress ? onBackPress() : false)") { result ->
+                    if (result != "true") {
+                        isEnabled = false
+                        onBackPressedDispatcher.onBackPressed()
+                    }
+                }
+            }
+        })
+
+        handleIntent(intent, first = true)
 
         // Android 13+ asks permission to show the "playing" notification
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -140,17 +153,19 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleIntent(intent)
+        handleIntent(intent, first = false)
     }
 
     /** A link shared to this app from YouTube (or anywhere) ends up here. */
-    private fun handleIntent(i: Intent?) {
+    private fun handleIntent(i: Intent?, first: Boolean) {
         var url = appUrl
+        var hasLink = false
         if (i != null) {
             val shared = if (i.action == Intent.ACTION_SEND) i.getStringExtra(Intent.EXTRA_TEXT) else null
             val data = i.data
             if (!shared.isNullOrBlank()) {
                 url = appUrl + "?text=" + Uri.encode(shared)
+                hasLink = true
             } else if (i.action == Intent.ACTION_VIEW && data != null) {
                 url = if (data.scheme == "https") {
                     data.toString()                          // https://academichub.dev/re/yt-v3/?code=...
@@ -158,9 +173,14 @@ class MainActivity : AppCompatActivity() {
                     val q = data.encodedQuery                // prathmeshyt://play?code=...&list=...
                     if (q.isNullOrBlank()) appUrl else "$appUrl?$q"
                 }
+                hasLink = true
             }
         }
-        web.loadUrl(url)
+        // Opening the app again (notification tap, launcher icon) must NOT reload the page,
+        // otherwise the playing video, search results and queue would be lost.
+        if (!first && !hasLink) return
+        // "no-cache" = always fetch the newest index.html from the server (WebView caches aggressively)
+        web.loadUrl(url, mapOf("Cache-Control" to "no-cache"))
     }
 
     private fun pipParams(): PictureInPictureParams {
