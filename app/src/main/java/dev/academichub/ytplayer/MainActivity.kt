@@ -145,8 +145,21 @@ class MainActivity : AppCompatActivity() {
 
     /** A link shared to this app from YouTube (or anywhere) ends up here. */
     private fun handleIntent(i: Intent?) {
-        val shared = if (i != null && i.action == Intent.ACTION_SEND) i.getStringExtra(Intent.EXTRA_TEXT) else null
-        val url = if (!shared.isNullOrBlank()) appUrl + "?text=" + Uri.encode(shared) else appUrl
+        var url = appUrl
+        if (i != null) {
+            val shared = if (i.action == Intent.ACTION_SEND) i.getStringExtra(Intent.EXTRA_TEXT) else null
+            val data = i.data
+            if (!shared.isNullOrBlank()) {
+                url = appUrl + "?text=" + Uri.encode(shared)
+            } else if (i.action == Intent.ACTION_VIEW && data != null) {
+                url = if (data.scheme == "https") {
+                    data.toString()                          // https://academichub.dev/re/yt-v3/?code=...
+                } else {
+                    val q = data.encodedQuery                // prathmeshyt://play?code=...&list=...
+                    if (q.isNullOrBlank()) appUrl else "$appUrl?$q"
+                }
+            }
+        }
         web.loadUrl(url)
     }
 
