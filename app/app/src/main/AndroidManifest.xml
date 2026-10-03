@@ -7,6 +7,18 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Lets the app find a browser that supports Custom Tabs (Android 11+ package visibility) -->
+    <queries>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
@@ -35,7 +47,8 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
 
-            <!-- Custom link:  myyt://play?code=VIDEO_ID  (like tg://resolve?domain=xxx) -->
+            <!-- Custom link:  myyt://play?code=VIDEO_ID  (like tg://resolve?domain=xxx)
+                 Also  myyt://auth?r=...  = the Custom Tab hands a finished Google sign-in back to the app (sub-task 9) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
