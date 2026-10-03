@@ -170,7 +170,7 @@ class MainActivity : AppCompatActivity() {
                 url = if (data.scheme == "https") {
                     data.toString()                          // https://academichub.dev/re/yt-v3/?code=...
                 } else {
-                    val q = data.encodedQuery                // prathmeshyt://play?code=...&list=...
+                    val q = data.encodedQuery                // myyt://play?code=...&list=...
                     if (q.isNullOrBlank()) appUrl else "$appUrl?$q"
                 }
                 hasLink = true
@@ -212,7 +212,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Opens the phone setting where PiP can be switched on for this app. */
     private fun askPipPermission() {
-        Toast.makeText(this, "Turn ON Picture-in-Picture for Prathmesh YouTube", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Turn ON Picture-in-Picture for YouTube Free", Toast.LENGTH_LONG).show()
         try {
             startActivity(
                 Intent("android.settings.PICTURE_IN_PICTURE_SETTINGS", Uri.parse("package:$packageName"))
