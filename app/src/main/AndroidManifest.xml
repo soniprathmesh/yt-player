@@ -35,12 +35,12 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
 
-            <!-- Custom link:  prathmeshyt://play?code=VIDEO_ID  (like tg://resolve?domain=xxx) -->
+            <!-- Custom link:  myyt://play?code=VIDEO_ID  (like tg://resolve?domain=xxx) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="prathmeshyt" />
+                <data android:scheme="myyt" />
             </intent-filter>
 
             <!-- Normal web links to the player page can also open the app -->

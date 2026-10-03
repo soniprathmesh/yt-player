@@ -47,7 +47,7 @@ class KeepAliveService : Service() {
 
     // what the web page tells us
     private var ytState = -1        // -1 none, 0 ended, 1 playing, 2 paused, 3 buffering
-    private var title = "Prathmesh YouTube"
+    private var title = "YouTube Free"
     private var hasList = false
     private var positionMs = -1L    // -1 = unknown
     private var durationMs = 0L
@@ -152,7 +152,7 @@ class KeepAliveService : Service() {
         session.setMetadata(
             MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_TITLE, title)
-                .putString(MediaMetadata.METADATA_KEY_ARTIST, "Prathmesh YouTube")
+                .putString(MediaMetadata.METADATA_KEY_ARTIST, "YouTube Free")
                 .putLong(MediaMetadata.METADATA_KEY_DURATION, if (durationMs > 0) durationMs else -1L)
                 .build()
         )
