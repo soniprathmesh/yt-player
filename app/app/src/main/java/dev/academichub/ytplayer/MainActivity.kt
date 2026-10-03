@@ -14,9 +14,12 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Rational
 import android.widget.Toast
+import androidx.browser.customtabs.CustomTabsClient
+import androidx.browser.customtabs.CustomTabsIntent
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.graphics.Bitmap
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -49,6 +52,12 @@ class MainActivity : AppCompatActivity() {
     @Volatile
     private var videoActive = false
 
+    // Sub-task 9: Google sign-in runs in a Custom Tab and comes back as  myyt://auth?r=CODE.
+    // The code is handed to the page (window.onAuthReturn) as soon as the page is loaded.
+    private var pageLoaded = false
+    private var pendingAuth: String? = null
+    private val authCodeRe = Regex("^[A-Za-z0-9_-]{20,100}$")
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,6 +73,17 @@ class MainActivity : AppCompatActivity() {
 
         web.webChromeClient = WebChromeClient()
         web.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                pageLoaded = false
+            }
+
+            override fun onPageFinished(view: WebView, url: String?) {
+                val host = Uri.parse(url ?: "").host ?: return
+                if (host != appHost && !host.endsWith(".$appHost")) return
+                pageLoaded = true
+                pendingAuth?.let { deliverAuth(it) }
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 if (!request.isForMainFrame) return false
                 val host = request.url.host ?: return false
@@ -113,6 +133,12 @@ class MainActivity : AppCompatActivity() {
             fun enterPip() {
                 runOnUiThread { this@MainActivity.enterPip() }
             }
+
+            /** Google sign-in / Connect YouTube: opens the server's /re/yt-v3/auth/... address in a Custom Tab. */
+            @JavascriptInterface
+            fun openAuth(path: String) {
+                runOnUiThread { openAuthTab(path) }
+            }
         }, "AndroidBridge")
 
         // Notification / lock-screen buttons -> YouTube player commands
@@ -160,6 +186,16 @@ class MainActivity : AppCompatActivity() {
     private fun handleIntent(i: Intent?, first: Boolean) {
         var url = appUrl
         var hasLink = false
+        // Back from the Custom Tab:  myyt://auth?r=CODE  -> do NOT reload the page (the music keeps playing)
+        if (i != null && i.action == Intent.ACTION_VIEW && i.data?.scheme == "myyt" && i.data?.host == "auth") {
+            val r = i.data?.getQueryParameter("r")
+            if (r != null && authCodeRe.matches(r)) {
+                pendingAuth = r
+                if (first) web.loadUrl(appUrl, mapOf("Cache-Control" to "no-cache"))   // page is delivered in onPageFinished
+                else if (pageLoaded) deliverAuth(r)
+            }
+            return
+        }
         if (i != null) {
             val shared = if (i.action == Intent.ACTION_SEND) i.getStringExtra(Intent.EXTRA_TEXT) else null
             val data = i.data
@@ -181,6 +217,41 @@ class MainActivity : AppCompatActivity() {
         if (!first && !hasLink) return
         // "no-cache" = always fetch the newest index.html from the server (WebView caches aggressively)
         web.loadUrl(url, mapOf("Cache-Control" to "no-cache"))
+    }
+
+    /** Gives the sign-in result code to the page, once. The page then asks the server to finish the login. */
+    private fun deliverAuth(r: String) {
+        pendingAuth = null
+        // r is checked against authCodeRe before it gets here, so it is safe inside the quotes
+        web.evaluateJavascript("window.onAuthReturn && onAuthReturn('$r')", null)
+    }
+
+    /**
+     * Opens Google's sign-in page in a Chrome Custom Tab (Google blocks it inside a WebView).
+     * Only addresses of this server under /re/yt-v3/auth/ are accepted.
+     */
+    private fun openAuthTab(path: String) {
+        val ok = path.startsWith("/re/yt-v3/auth/") && path.length <= 300 &&
+            !path.contains("//") && path.none { it.isWhitespace() || it == '\\' }
+        val uri = if (ok) Uri.parse("https://$appHost$path") else null
+        if (uri == null || uri.host != appHost) {
+            Toast.makeText(this, "Could not start sign-in", Toast.LENGTH_LONG).show()
+            return
+        }
+        // A browser that supports Custom Tabs. Without a package the system could hand the https link
+        // back to this very app (it is one of its own web links), and Google would again show up in the WebView.
+        val browser = CustomTabsClient.getPackageName(this, null)
+        if (browser == null) {
+            Toast.makeText(this, "Install or update Chrome to sign in with Google", Toast.LENGTH_LONG).show()
+            return
+        }
+        try {
+            val tab = CustomTabsIntent.Builder().setShowTitle(true).build()
+            tab.intent.setPackage(browser)
+            tab.launchUrl(this, uri)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Could not open the browser: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun pipParams(): PictureInPictureParams {
