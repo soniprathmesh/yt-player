@@ -61,7 +61,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="academichub.dev" android:pathPrefix="/re/yt-v3" />
+                <data android:scheme="https" android:host="aiml.mrsoni.in" android:pathPrefix="/re/yt-v3" />
             </intent-filter>
         </activity>
 
