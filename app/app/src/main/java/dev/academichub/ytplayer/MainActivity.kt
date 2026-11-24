@@ -42,8 +42,8 @@ class BgWebView(context: Context) : WebView(context) {
 class MainActivity : AppCompatActivity() {
 
     // ====== CHANGE THIS if your domain or path changes ======
-    private val appUrl = "https://academichub.dev/re/yt-v3/"
-    private val appHost = "academichub.dev"
+    private val appUrl = "https://aiml.mrsoni.in/re/yt-v3/"
+    private val appHost = "aiml.mrsoni.in"
     // ========================================================
 
     private lateinit var web: BgWebView
